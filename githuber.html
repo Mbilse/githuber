@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=0.7, user-scalable=no">
+    <title>Githuber IDE</title>
+    <!-- 引入字体图标 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Monaco 编辑器核心 -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f8fa;
+            --bg-sidebar: #f0f2f5;
+            --text-primary: #24292f;
+            --text-secondary: #57606a;
+            --border-color: #d0d7de;
+            --accent: #0969da;
+            --accent-hover: #1f883d;
+            --danger: #cf222e;
+            --tree-hover: #eaeef2;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08);
+            --monaco-bg: #1e1e1e;
+        }
+
+        body.dark {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-sidebar: #0d1117;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --border-color: #30363d;
+            --accent: #2f81f7;
+            --accent-hover: #2c974b;
+            --danger: #f85149;
+            --tree-hover: #1f2428;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 主布局 */
+        .app {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+
+        /* 竖向侧栏 (最左侧) */
+        .vertical-sidebar {
+            width: 50px;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0;
+            gap: 24px;
+            z-index: 10;
+        }
+
+        .sidebar-icon {
+            font-size: 15px;
+            cursor: pointer;
+            transition: 0.2s;
+            color: var(--text-secondary);
+            position: relative;
+        }
+        .sidebar-icon:hover { color: var(--accent); transform: scale(1.05);}
+        .avatar-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+        }
+
+        /* 主区域三栏布局 */
+        .main-layout {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .top-bar {
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            background: var(--bg-secondary);
+        }
+
+        .repo-select, .branch-select, .search-input {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: none;
+            background: var(--accent);
+            color: white;
+            cursor: pointer;
+            font-size: 13px;
+            transition: 0.1s;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .btn-sm { padding: 4px 8px; font-size: 12px;}
+
+        .three-columns {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* 文件树面板 */
+        .file-tree-panel {
+            width: 260px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .editor-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+
+        .commit-panel {
+            width: 320px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 12px;
+            gap: 16px;
+        }
+
+        .tree-item {
+            font-size: 13px;
+            padding: 4px 0 4px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 6px;
+        }
+        .tree-item:hover { background: var(--tree-hover);}
+        .folder { font-weight: 500; }
+        .file { margin-left: 16px; }
+
+        /* 模块卡片 */
+        .card {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 12px;
+        }
+        .commit-message {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            resize: vertical;
+        }
+        .contrib-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 3px;
+            margin-top: 8px;
+        }
+        .contrib-cell {
+            aspect-ratio: 1;
+            background: #ebedf0;
+            border-radius: 2px;
+        }
+        body.dark .contrib-cell { background: #161b22; }
+        .level-1 { background: #9be9a8; }
+        .level-2 { background: #40c463; }
+        .level-3 { background: #30a14e; }
+        .level-4 { background: #216e39; }
+
+        .tab-buttons {
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 6px 0;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom: 2px solid var(--accent);
+        }
+
+        .status-badge {
+            font-size: 12px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 2px 8px;
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+
+        .modal {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 24px;
+            min-width: 400px;
+            border: 1px solid var(--border-color);
+        }
+        input, textarea, select {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+        }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .mb-2 { margin-bottom: 8px; }
+        .mt-2 { margin-top: 8px; }
+    </style>
+</head>
+<body>
+<div class="app" id="app">
+    <!-- 竖向侧栏 -->
+    <div class="vertical-sidebar">
+        <i class="fas fa-code-branch sidebar-icon" title="Githuber" style="font-size:21px;color:var(--accent);"></i>
+        <img id="userAvatar" class="avatar-icon" src="https://avatars.githubusercontent.com/u/583231?v=4" alt="avatar">
+        <i class="fas fa-moon sidebar-icon" id="themeToggle" title="Dark Mode"></i>
+        <i class="fas fa-key sidebar-icon" id="setTokenBtn" title="Set Token"></i>
+        <i class="fas fa-exchange-alt sidebar-icon" id="switchAccountBtn" title="Change account"></i>
+        <i class="fas fa-gift sidebar-icon" id="gistsBtn" title="Manage gists"></i>
+        <i class="fas fa-chart-line sidebar-icon" id="contribViewBtn" title="Contribute Pic"></i>
+        <i class="fas fa-search sidebar-icon" id="globalSearchBtn" title="Search"></i>
+    </div>
+
+    <!-- 主区域 -->
+    <div class="main-layout">
+        <div class="top-bar">
+            <select id="repoSelect" class="repo-select" style="min-width:200px;"><option>Loading...</option></select>
+            <select id="branchSelect" class="branch-select"><option>main</option></select>
+            <button id="newRepoBtn" class="btn btn-sm"><i class="fas fa-plus"></i> New repository</button>
+            <button id="starRepoBtn" class="btn btn-sm btn-outline"><i class="far fa-star"></i> Star</button>
+            <button id="forkRepoBtn" class="btn btn-sm btn-outline"><i class="fas fa-code-branch"></i> Fork</button>
+            <button id="newIssueBtn" class="btn btn-sm"><i class="fas fa-exclamation-circle"></i> New Issue</button>
+            <button id="newPrBtn" class="btn btn-sm"><i class="fas fa-code-pull-request"></i> New PR</button>
+            <div style="flex:1"></div>
+            <span id="userLoginSpan" style="font-size:12px;"></span>
+        </div>
+
+        <div class="three-columns">
+            <!-- 左侧文件树 + 分支切换/新建文件删除 -->
+            <div class="file-tree-panel">
+                <div class="flex-between"><strong><i class="fas fa-folder-tree"></i> Files</strong>
+                    <div><button id="newFileBtn" class="btn-sm btn-outline" style="margin-right:4px;"><i class="fas fa-file"></i></button>
+                    <button id="delFileBtn" class="btn-sm btn-outline"><i class="fas fa-trash"></i></button></div>
+                </div>
+                <div id="fileTreeContainer" style="margin-top: 12px; overflow-y: auto; flex:1;">Choose a repo to load</div>
+                <div class="mt-2"><i class="fas fa-code-branch"></i> branch to: <select id="branchSelectTree" style="width:100%; margin-top:6px;"></select></div>
+            </div>
+
+            <!-- 中间 Monaco 编辑器 -->
+            <div class="editor-panel">
+                <div id="editorHeader" class="flex-between" style="padding:6px 12px; border-bottom:1px solid var(--border-color);">
+                    <span id="currentFilePath">Not choosed file</span>
+                    <button id="saveCommitBtn" class="btn btn-sm"><i class="fas fa-save"></i> Commit</button>
+                </div>
+                <div id="monacoEditor" style="flex:1; min-height:0;"></div>
+            </div>
+
+            <!-- 右侧提交面板 + 多标签 -->
+            <div class="commit-panel">
+                <div class="card">
+                    <strong><i class="fas fa-pen-alt"></i> Commit Dash</strong>
+                    <textarea id="commitMsgInput" class="commit-message" rows="2" placeholder="commit message..."></textarea>
+                    <button id="commitFileBtn" class="btn" style="width:100%; margin-top:8px;"><i class="fas fa-upload"></i> Commit Changes</button>
+                    <div class="status-badge mt-2" id="commitStatus"></div>
+                </div>
+
+                <!-- Tab 内容: Issue, PR, Discussion, Gists -->
+                <div class="card">
+                    <div class="tab-buttons">
+                        <button class="tab-btn active" data-tab="issues">Issues</button>
+                        <button class="tab-btn" data-tab="prs">PRs</button>
+                        <button class="tab-btn" data-tab="discussions">Discussions</button>
+                        <button class="tab-btn" data-tab="gistsTab">Gists</button>
+                    </div>
+                    <div id="tabContent" style="max-height: 300px; overflow-y: auto;">
+                        Please choose a repo
+                    </div>
+                    <button id="createInTabBtn" class="btn-sm btn-outline mt-2" style="width:100%">New(Issue/PR/Gist)</button>
+                </div>
+                <!-- 贡献图预览 -->
+                <div class="card">
+                    <div class="flex-between"><span><i class="fas fa-chart-simple"></i>Contributor Pic</span><span id="contribUsername"></span></div>
+                    <div id="contribGrid" class="contrib-grid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Token 模态框 -->
+<div id="tokenModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>🔑 Needs GitHub Token</h3>
+        <p style="margin:12px 0; font-size:13px;">To <a href="https://github.com/settings/tokens" target="_blank">Personal Access Token</a>, please give us a token.</p>
+        <input type="password" id="tokenInput" placeholder="输入 token" style="width:100%; margin-bottom:16px;" />
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button id="tokenSaveBtn" class="btn">Save and start</button>
+        </div>
+    </div>
+</div>
+
+<!-- 搜索结果模态框 -->
+<div id="searchResultModal" class="modal" style="display: none;">
+    <div class="modal-content" style="width:90%; max-width:700px; max-height:80vh; display:flex; flex-direction:column;">
+        <div class="flex-between">
+            <h3><i class="fas fa-search"></i> Search Results</h3>
+            <button id="closeSearchModal" style="background:none; border:none; font-size:20px; cursor:pointer;">&times;</button>
+        </div>
+        <div style="display:flex; gap:8px; margin:12px 0;">
+            <input type="text" id="searchKeyword" placeholder="Input..." style="flex:1;" />
+            <button id="doSearchBtn" class="btn">Search</button>
+        </div>
+        <div id="searchResultsTabs" style="display:flex; gap:12px; border-bottom:1px solid var(--border-color);">
+            <button class="tab-btn active" data-search-tab="repos">📁 Repository</button>
+            <button class="tab-btn" data-search-tab="users">👥 User</button>
+        </div>
+        <div id="searchResultList" style="overflow-y:auto; margin-top:12px; flex:1;">
+            Please input a keyword to search.
+        </div>
+    </div>
+</div>
+<!-- 引入 Monaco 编辑器 -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+<script>
+    // ==================== Githuber 核心 JavaScript ====================
+// 需要配合特定的 HTML 结构（ID 详见代码中的元素引用）
+
+// -------------------- 全局状态 --------------------
+let githubToken = localStorage.getItem('gh_token') || '';
+let currentUser = null;
+let accounts = JSON.parse(localStorage.getItem('gh_accounts') || '[]');
+let activeRepo = null;          // { owner, name }
+let currentBranch = 'main';
+let branchesList = [];
+let currentFilePath = null;
+let currentFileSha = null;
+let currentFileContent = '';
+let editor = null;
+let monacoLoaded = false;
+let pendingEditorValue = '';
+
+// -------------------- DOM 元素引用 --------------------
+const repoSelect = document.getElementById('repoSelect');
+const branchSelect = document.getElementById('branchSelect');
+const branchSelectTree = document.getElementById('branchSelectTree');
+const fileTreeContainer = document.getElementById('fileTreeContainer');
+const commitMsgInput = document.getElementById('commitMsgInput');
+const commitFileBtn = document.getElementById('commitFileBtn');
+const saveCommitBtn = document.getElementById('saveCommitBtn');
+const currentFilePathSpan = document.getElementById('currentFilePath');
+const userAvatar = document.getElementById('userAvatar');
+const themeToggle = document.getElementById('themeToggle');
+const switchAccountBtn = document.getElementById('switchAccountBtn');
+const newRepoBtn = document.getElementById('newRepoBtn');
+const starRepoBtn = document.getElementById('starRepoBtn');
+const forkRepoBtn = document.getElementById('forkRepoBtn');
+const newIssueBtn = document.getElementById('newIssueBtn');
+const newPrBtn = document.getElementById('newPrBtn');
+const newFileBtn = document.getElementById('newFileBtn');
+const delFileBtn = document.getElementById('delFileBtn');
+const userLoginSpan = document.getElementById('userLoginSpan');
+const globalSearchBtn = document.getElementById('globalSearchBtn');
+const gistsBtn = document.getElementById('gistsBtn');
+const contribViewBtn = document.getElementById('contribViewBtn');
+const createInTabBtn = document.getElementById('createInTabBtn');
+const setTokenBtn = document.getElementById('setTokenBtn');
+
+// -------------------- 辅助函数 --------------------
+function showToast(msg, isError = false) {
+    const toast = document.createElement('div');
+    toast.textContent = msg;
+    toast.style.position = 'fixed';
+    toast.style.bottom = '20px';
+    toast.style.right = '20px';
+    toast.style.backgroundColor = isError ? '#cf222e' : '#2c974b';
+    toast.style.color = 'white';
+    toast.style.padding = '8px 16px';
+    toast.style.borderRadius = '6px';
+    toast.style.zIndex = '3000';
+    toast.style.fontSize = '13px';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+async function ghFetch(url, options = {}) {
+    if (!githubToken) throw new Error('未设置 GitHub Token');
+    const res = await fetch(url, {
+        ...options,
+        headers: {
+            'Authorization': `Bearer ${githubToken}`,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            ...options.headers
+        }
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`API ${res.status}: ${errText.slice(0, 100)}`);
+    }
+    return res.json();
+}
+
+// -------------------- Token 模态框 --------------------
+function showTokenModal() {
+    const modal = document.getElementById('tokenModal');
+    if (!modal) {
+        // 如果模态框不存在，降级使用 prompt
+        const newToken = prompt("Please enter GitHub Personal Access Token (needs repo, user, gist)");
+        if (newToken) {
+            githubToken = newToken;
+            localStorage.setItem('gh_token', newToken);
+            if (!accounts.find(a => a.token === newToken)) accounts.push({ token: newToken, login: '?' });
+            localStorage.setItem('gh_accounts', JSON.stringify(accounts));
+            location.reload();
+        }
+        return;
+    }
+    modal.style.display = 'flex';
+    const tokenInput = document.getElementById('tokenInput');
+    const saveBtn = document.getElementById('tokenSaveBtn');
+    saveBtn.onclick = () => {
+        const newToken = tokenInput.value.trim();
+        if (newToken) {
+            githubToken = newToken;
+            localStorage.setItem('gh_token', newToken);
+            if (!accounts.find(a => a.token === newToken)) accounts.push({ token: newToken, login: '?' });
+            localStorage.setItem('gh_accounts', JSON.stringify(accounts));
+            modal.style.display = 'none';
+            location.reload();
+        } else {
+            showToast('This Token is incorrect.', true);
+        }
+    };
+}
+
+function initToken() {
+    const stored = localStorage.getItem('gh_token');
+    if (stored && stored.length > 10) {
+        githubToken = stored;
+        return true;
+    } else {
+        showTokenModal();
+        return false;
+    }
+}
+
+// -------------------- 用户 & 仓库 --------------------
+async function loadUser() {
+    if (!githubToken) return;
+    try {
+        const user = await ghFetch('https://api.github.com/user');
+        currentUser = user;
+        userAvatar.src = user.avatar_url;
+        userLoginSpan.innerText = `@${user.login}`;
+        document.getElementById('contribUsername').innerText = user.login;
+        loadUserContribution(user.login);
+        await loadUserRepos();
+        loadGistsPreview();
+    } catch (e) {
+        showToast('E - Userload: ' + e.message, true);
+    }
+}
+
+async function loadUserRepos() {
+    const repos = await ghFetch('https://api.github.com/user/repos?sort=updated&per_page=50');
+    repoSelect.innerHTML = '';
+    repos.forEach(repo => {
+        const opt = document.createElement('option');
+        opt.value = `${repo.owner.login}/${repo.name}`;
+        opt.textContent = repo.full_name;
+        repoSelect.appendChild(opt);
+    });
+    if (repos.length) {
+        const first = repos[0];
+        await changeRepo(first.owner.login, first.name);
+    }
+}
+
+async function changeRepo(owner, name) {
+    activeRepo = { owner, name };
+    await loadBranches();
+    await loadFileTree();
+    await loadIssuesPrsDiscussions();
+    checkStarStatus();
+}
+
+async function loadBranches() {
+    const branches = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/branches`);
+    branchesList = branches.map(b => b.name);
+    const defaultBranch = branchesList.includes('main') ? 'main' : (branchesList[0] || 'main');
+    currentBranch = defaultBranch;
+    const populateSelect = (sel) => {
+        if (!sel) return;
+        sel.innerHTML = branchesList.map(b => `<option value="${b}" ${b === currentBranch ? 'selected' : ''}>${b}</option>`).join('');
+        sel.onchange = (e) => { currentBranch = e.target.value; loadFileTree(); };
+    };
+    populateSelect(branchSelect);
+    populateSelect(branchSelectTree);
+}
+
+// -------------------- 文件树 --------------------
+async function loadFileTree() {
+    if (!activeRepo) return;
+    fileTreeContainer.innerHTML = '<div>Loading...</div>';
+    try {
+        const contents = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents?ref=${currentBranch}`);
+        renderTree(contents);
+    } catch (e) {
+        fileTreeContainer.innerHTML = '<div>No here...</div>';
+    }
+}
+
+function renderTree(items, parentPath = '') {
+    fileTreeContainer.innerHTML = '';
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'tree-item';
+        div.innerHTML = `<i class="fas ${item.type === 'dir' ? 'fa-folder' : 'fa-file'}"></i> ${item.name}`;
+        div.onclick = async (e) => {
+            e.stopPropagation();
+            if (item.type === 'file') {
+                await openFile(item.path, item.sha);
+            } else {
+                await loadDirectory(item.path);
+            }
+        };
+        fileTreeContainer.appendChild(div);
+    });
+}
+
+async function loadDirectory(dirPath) {
+    const items = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents/${dirPath}?ref=${currentBranch}`);
+    renderTree(items, dirPath);
+}
+
+async function openFile(path, sha) {
+    currentFilePath = path;
+    currentFileSha = sha;
+    currentFilePathSpan.innerText = path;
+    const fileData = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents/${path}?ref=${currentBranch}`);
+    const decoded = atob(fileData.content);
+    currentFileContent = decoded;
+    if (editor) {
+        editor.setValue(decoded);
+    } else {
+        pendingEditorValue = decoded;
+        initMonaco();
+    }
+}
+
+// -------------------- Monaco 编辑器 --------------------
+function initMonaco() {
+    if (monacoLoaded) return;
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+        monacoLoaded = true;
+        editor = monaco.editor.create(document.getElementById('monacoEditor'), {
+            value: pendingEditorValue || '// choose a file to edit.',
+            language: 'plaintext',
+            theme: document.body.classList.contains('dark') ? 'vs-dark' : 'vs',
+            automaticLayout: true
+        });
+    });
+}
+
+// -------------------- 提交更改 --------------------
+async function commitChanges(isNewFile = false, contentToCommit = null) {
+    if (!currentFilePath && !isNewFile) {
+        showToast('Please Enter a file or create new.', true);
+        return;
+    }
+    let filePath = currentFilePath;
+    let sha = currentFileSha;
+    let content = contentToCommit !== null ? contentToCommit : (editor ? editor.getValue() : '');
+    if (!content && !isNewFile) return;
+    const commitMsg = commitMsgInput.value.trim() || "Update via Githuber";
+    const encoded = btoa(unescape(encodeURIComponent(content)));
+    const url = `https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents/${filePath}`;
+    const body = { message: commitMsg, content: encoded, branch: currentBranch };
+    if (sha) body.sha = sha;
+    try {
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${githubToken}`, 'Accept': 'application/vnd.github+json' },
+            body: JSON.stringify(body)
+        });
+        if (res.ok) {
+            showToast('Saved！');
+            await loadFileTree();
+            document.getElementById('commitStatus').innerText = '✅ Saved';
+        } else {
+            throw new Error('Failed to commit.');
+        }
+    } catch (e) {
+        showToast('E - Commit: ' + e.message, true);
+    }
+}
+
+async function deleteCurrentFile() {
+    if (!currentFilePath) return showToast('Not choosed yet', true);
+    if (!confirm(`Delete ${currentFilePath}?`)) return;
+    const url = `https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents/${currentFilePath}`;
+    const body = { message: `Delete ${currentFilePath}`, sha: currentFileSha, branch: currentBranch };
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${githubToken}` },
+        body: JSON.stringify(body)
+    });
+    if (res.ok) {
+        showToast('Deleted');
+        loadFileTree();
+        if (editor) editor.setValue('');
+        currentFilePath = null;
+        currentFilePathSpan.innerText = 'Not Choosed.';
+    } else {
+        showToast('Failed to del', true);
+    }
+}
+
+function showNewFileModal() {
+    const newPath = prompt("Type Url(such as src/App.js)");
+    if (newPath) {
+        currentFilePath = newPath;
+        currentFileSha = null;
+        currentFilePathSpan.innerText = newPath;
+        if (editor) editor.setValue('');
+        else initMonaco();
+        commitChanges(true, '');
+    }
+}
+
+// -------------------- Star / Fork / 新建仓库 --------------------
+async function starRepo() {
+    await ghFetch(`https://api.github.com/user/starred/${activeRepo.owner}/${activeRepo.name}`, { method: 'PUT' });
+    showToast('Starred');
+    starRepoBtn.innerHTML = '<i class="fas fa-star"></i> Starred';
+}
+
+async function forkRepo() {
+    await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/forks`, { method: 'POST' });
+    showToast('Posted Fork');
+}
+
+async function checkStarStatus() {
+    try {
+        await ghFetch(`https://api.github.com/user/starred/${activeRepo.owner}/${activeRepo.name}`);
+        starRepoBtn.innerHTML = '<i class="fas fa-star"></i> Starred';
+    } catch (e) {
+        starRepoBtn.innerHTML = '<i class="far fa-star"></i> Star';
+    }
+}
+
+async function createNewRepo() {
+    const name = prompt("Type name");
+    if (name) {
+        await ghFetch('https://api.github.com/user/repos', { method: 'POST', body: JSON.stringify({ name }) });
+        showToast('Created');
+        await loadUserRepos();
+    }
+}
+
+// -------------------- Issues / PRs / Discussions --------------------
+async function loadIssuesPrsDiscussions() {
+    if (!activeRepo) return;
+    try {
+        const issues = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/issues?state=all&per_page=5`);
+        const prs = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/pulls?state=open&per_page=5`);
+        let discussions = [];
+        try { discussions = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/discussions?per_page=5`); } catch (e) { discussions = []; }
+        window.tabData = { issues, prs, discussions };
+        showTab('issues');
+    } catch (e) {
+        console.warn(e);
+    }
+}
+
+function showTab(tabId) {
+    const data = window.tabData || { issues: [], prs: [], discussions: [] };
+    let html = '';
+    if (tabId === 'issues') {
+        html = data.issues.map(i => `<div><i class="fas fa-exclamation-circle"></i> <a href="${i.html_url}" target="_blank">${i.title}</a> <span class="status-badge">#${i.number}</span></div>`).join('') || 'No Issue';
+    } else if (tabId === 'prs') {
+        html = data.prs.map(p => `<div><i class="fas fa-code-pull-request"></i> ${p.title} (${p.state})</div>`).join('') || 'No PR';
+    } else if (tabId === 'discussions') {
+        html = data.discussions.map(d => `<div><i class="fas fa-comment"></i> ${d.title}</div>`).join('') || 'No discussion';
+    } else if (tabId === 'gistsTab') {
+        loadGistsPreview().then(gists => {
+            const gistsHtml = gists.map(g => `<div><i class="fas fa-file-code"></i> ${g.description || g.id}</div>`).join('') || 'No Gists';
+            document.getElementById('tabContent').innerHTML = gistsHtml;
+        });
+        return;
+    }
+    document.getElementById('tabContent').innerHTML = html;
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.querySelector(`[data-tab="${tabId}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+}
+
+async function loadGistsPreview() {
+    try {
+        const gists = await ghFetch('https://api.github.com/gists?per_page=5');
+        return gists;
+    } catch (e) {
+        return [];
+    }
+}
+
+async function createIssue(title) {
+    await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/issues`, {
+        method: 'POST',
+        body: JSON.stringify({ title, body: "Created by Githuber" })
+    });
+    showToast('Issue Created');
+    loadIssuesPrsDiscussions();
+}
+
+async function createPr(title) {
+    await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/pulls`, {
+        method: 'POST',
+        body: JSON.stringify({ title, head: currentBranch, base: 'main', body: "Auto PR" })
+    });
+    showToast('PR Created');
+    loadIssuesPrsDiscussions();
+}
+
+function newIssueModal() {
+    const title = prompt("Issue Title");
+    if (title) createIssue(title);
+}
+
+function newPrModal() {
+    const title = prompt("PR Title");
+    if (title) createPr(title);
+}
+
+// -------------------- 贡献图（绿格子）--------------------
+async function loadUserContribution(username) {
+    const query = `query($user:String!){user(login:$user){contributionsCollection{contributionCalendar{weeks{contributionDays{date contributionCount}}}}}}`;
+    try {
+        const res = await fetch('https://api.github.com/graphql', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${githubToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, variables: { user: username } })
+        });
+        const json = await res.json();
+        const weeks = json?.data?.user?.contributionsCollection?.contributionCalendar?.weeks || [];
+        let days = weeks.flatMap(w => w.contributionDays);
+        days = days.slice(-49);
+        const grid = document.getElementById('contribGrid');
+        if (!grid) return;
+        grid.innerHTML = days.map(d => `<div class="contrib-cell level-${Math.min(Math.floor(d.contributionCount / 5), 4)}" title="${d.date}: ${d.contributionCount}"></div>`).join('');
+    } catch (e) {
+        console.warn('Error', e);
+    }
+}
+
+// -------------------- 全局搜索（模态框）--------------------
+let currentSearchType = 'repos';
+
+async function performSearch() {
+    const keyword = document.getElementById('searchKeyword')?.value.trim();
+    if (!keyword) return;
+    const listDiv = document.getElementById('searchResultList');
+    if (!listDiv) return;
+    listDiv.innerHTML = '<div>Loading...</div>';
+    try {
+        if (currentSearchType === 'repos') {
+            const res = await ghFetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(keyword)}&per_page=20`);
+            const repos = res.items || [];
+            if (!repos.length) { listDiv.innerHTML = '<div>No Repository</div>'; return; }
+            listDiv.innerHTML = repos.map(repo => `
+                <div style="padding:10px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div><i class="fas fa-book"></i> <strong>${repo.full_name}</strong><br><small>⭐ ${repo.stargazers_count} | 🍴 ${repo.forks_count} | ${repo.description || 'No description'}</small></div>
+                    <button class="btn-sm btn-outline" onclick="window.open('${repo.html_url}', '_blank')">Go</button>
+                </div>
+            `).join('');
+        } else if (currentSearchType === 'users') {
+            const res = await ghFetch(`https://api.github.com/search/users?q=${encodeURIComponent(keyword)}&per_page=20`);
+            const users = res.items || [];
+            if (!users.length) { listDiv.innerHTML = '<div>No User</div>'; return; }
+            listDiv.innerHTML = users.map(user => `
+                <div style="padding:10px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:10px;"><img src="${user.avatar_url}" width="32" height="32" style="border-radius:50%;"><div><strong>${user.login}</strong><br><small>${user.html_url}</small></div></div>
+                    <button class="btn-sm btn-outline" onclick="window.open('${user.html_url}', '_blank')">Go</button>
+                </div>
+            `).join('');
+        }
+    } catch (e) {
+        listDiv.innerHTML = `<div style="color:var(--danger);">E - Search: ${e.message}</div>`;
+    }
+}
+
+function showSearchModal() {
+    const modal = document.getElementById('searchResultModal');
+    if (!modal) { alert('搜索模态框未找到'); return; }
+    modal.style.display = 'flex';
+    const keywordInput = document.getElementById('searchKeyword');
+    if (keywordInput) keywordInput.value = '';
+    const listDiv = document.getElementById('searchResultList');
+    if (listDiv) listDiv.innerHTML = '<div>Input keywords to search</div>';
+    currentSearchType = 'repos';
+    const reposTab = document.querySelector('[data-search-tab="repos"]');
+    const usersTab = document.querySelector('[data-search-tab="users"]');
+    if (reposTab && usersTab) {
+        reposTab.classList.add('active');
+        usersTab.classList.remove('active');
+    }
+}
+
+function bindSearchEvents() {
+    const modal = document.getElementById('searchResultModal');
+    if (!modal) return;
+    const closeBtn = document.getElementById('closeSearchModal');
+    const doSearch = document.getElementById('doSearchBtn');
+    const keywordInput = document.getElementById('searchKeyword');
+    closeBtn.onclick = () => modal.style.display = 'none';
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    if (doSearch) doSearch.onclick = performSearch;
+    if (keywordInput) keywordInput.onkeypress = (e) => { if (e.key === 'Enter') performSearch(); };
+    document.querySelectorAll('[data-search-tab]').forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll('[data-search-tab]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentSearchType = btn.getAttribute('data-search-tab');
+            if (keywordInput && keywordInput.value.trim()) performSearch();
+            else if (listDiv) listDiv.innerHTML = '<div>输入关键词后点击搜索</div>';
+        };
+    });
+}
+
+// -------------------- 多账户切换 --------------------
+function switchAccount() {
+    const newToken = prompt("请输入新的 GitHub Token", githubToken);
+    if (newToken && newToken !== githubToken) {
+        githubToken = newToken;
+        localStorage.setItem('gh_token', newToken);
+        if (!accounts.find(a => a.token === newToken)) accounts.push({ token: newToken, login: '?' });
+        localStorage.setItem('gh_accounts', JSON.stringify(accounts));
+        showToast('Token 已更新，刷新页面...');
+        setTimeout(() => location.reload(), 1000);
+    }
+}
+
+// -------------------- 主题切换 --------------------
+function toggleTheme() {
+    document.body.classList.toggle('dark');
+    if (editor) {
+        const newTheme = document.body.classList.contains('dark') ? 'vs-dark' : 'vs';
+        monaco.editor.setTheme(newTheme);
+    }
+}
+
+// -------------------- 事件绑定 --------------------
+function bindEvents() {
+    if (repoSelect) repoSelect.onchange = (e) => { const [owner, name] = e.target.value.split('/'); changeRepo(owner, name); };
+    if (commitFileBtn) commitFileBtn.onclick = () => commitChanges(false);
+    if (saveCommitBtn) saveCommitBtn.onclick = () => commitChanges(false);
+    if (newFileBtn) newFileBtn.onclick = showNewFileModal;
+    if (delFileBtn) delFileBtn.onclick = deleteCurrentFile;
+    if (newRepoBtn) newRepoBtn.onclick = createNewRepo;
+    if (starRepoBtn) starRepoBtn.onclick = starRepo;
+    if (forkRepoBtn) forkRepoBtn.onclick = forkRepo;
+    if (newIssueBtn) newIssueBtn.onclick = newIssueModal;
+    if (newPrBtn) newPrBtn.onclick = newPrModal;
+    if (switchAccountBtn) switchAccountBtn.onclick = switchAccount;
+    if (globalSearchBtn) globalSearchBtn.onclick = showSearchModal;
+    if (gistsBtn) gistsBtn.onclick = () => showTab('gistsTab');
+    if (contribViewBtn) contribViewBtn.onclick = () => loadUserContribution(currentUser?.login || 'octocat');
+    if (createInTabBtn) createInTabBtn.onclick = () => {
+        const active = document.querySelector('.tab-btn.active')?.dataset.tab;
+        if (active === 'issues') newIssueModal();
+        else if (active === 'prs') newPrModal();
+        else if (active === 'gistsTab') alert('创建 Gist 功能可通过 API 扩展');
+        else alert('请切换到 Issues 或 PRs 标签');
+    };
+    if (themeToggle) themeToggle.onclick = toggleTheme;
+    if (setTokenBtn) setTokenBtn.onclick = () => { localStorage.removeItem('gh_token'); githubToken = ''; showTokenModal(); };
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.onclick = () => showTab(btn.dataset.tab);
+    });
+}
+
+// -------------------- 启动 --------------------
+async function bootstrap() {
+    if (!initToken()) return;
+    bindEvents();
+    bindSearchEvents();
+    await loadUser();
+    initMonaco();
+}
+
+bootstrap();
+</script>
+</body>
+</html>
