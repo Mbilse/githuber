@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Redirecting...</title>
+    <!-- No custom styles; pure browser defaults -->
+</head>
+<body>
+    <!-- Loading indicator as requested -->
+    <div id="loadingMessage">Loading...</div>
+    <!-- Button for manual switch / redirect -->
+    
+
+    <script>
+        (function() {
+            // ---------- Flag to prevent duplicate redirects ----------
+            let isRedirecting = false;
+            let autoRedirectTimer = null;
+
+            // ---------- Enhanced Mobile Detection (English logic) ----------
+            // Detects mobile devices, smartphones, tablets (including modern iPads)
+            function isMobileDevice() {
+                // 1. Standard user-agent detection for phones, tablets, and mobile browsers
+                const userAgent = navigator.userAgent;
+                const mobileRegex = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Windows Phone|webOS|Symbian|Kindle|Silk/i;
+                if (mobileRegex.test(userAgent)) {
+                    return true;
+                }
+
+                // 2. Special detection for iPadOS 13+ (Macintosh userAgent but with touch support)
+                // iPad Pro / modern iPads often have "Macintosh" in UA but support multi-touch points.
+                if (navigator.maxTouchPoints && navigator.maxTouchPoints > 1 && /Macintosh/.test(userAgent)) {
+                    return true;
+                }
+
+                // 3. Additional check for large touch-enabled tablets or hybrid devices
+                // (optional safe fallback: detect touch & screen size range typical for tablets)
+                // This helps to cover some edge cases without heavy overkill.
+                if (navigator.maxTouchPoints && navigator.maxTouchPoints > 0 && window.matchMedia && window.matchMedia("(max-width: 1024px)").matches) {
+                    // For devices with touch and screen width <= 1024px (common for tablets/mobile)
+                    // But avoid misclassifying large touchscreen laptops (>1024px usually desktop)
+                    return true;
+                }
+
+                return false;
+            }
+
+            // ---------- Redirect Logic ----------
+            // Performs the final redirect based on device type.
+            // Clears timer, prevents duplicate execution.
+            function performRedirect() {
+                if (isRedirecting) {
+                    return; // Already redirecting or redirected
+                }
+                isRedirecting = true;
+
+                // Clear the auto timer if it hasn't fired yet
+                if (autoRedirectTimer) {
+                    clearTimeout(autoRedirectTimer);
+                    autoRedirectTimer = null;
+                }
+
+                // Determine target page
+                const isMobile = isMobileDevice();
+                const targetUrl = isMobile ? "mobile.html" : "dash.html";
+                
+                // Execute navigation
+                window.location.href = targetUrl;
+            }
+
+            // ---------- Manual button handler (Switch & Jump) ----------
+            // This gives the user a way to manually trigger the device detection & redirect.
+            // It also cancels any pending auto redirect to avoid double navigation.
+            function onSwitchButtonClick() {
+                if (isRedirecting) {
+                    return; // Already redirecting or page is navigating away
+                }
+                // Cancel the scheduled auto redirect (if any) because user wants to jump now
+                if (autoRedirectTimer) {
+                    clearTimeout(autoRedirectTimer);
+                    autoRedirectTimer = null;
+                }
+                // Execute redirect immediately based on current device
+                performRedirect();
+            }
+
+            // ---------- Auto-redirect after 1.5 seconds ----------
+            // Set up timer to check device and redirect automatically.
+            autoRedirectTimer = setTimeout(function() {
+                // Auto-redirect only if not already redirecting (user may have clicked earlier)
+                if (!isRedirecting) {
+                    performRedirect();
+                }
+            }, 300); // 0.3 seconds delay
+
+            // ---------- Attach event listener to the button ----------
+            const switchBtn = document.getElementById("switchButton");
+            if (switchBtn) {
+                // Use click event for manual switching / jumping
+                switchBtn.addEventListener("click", onSwitchButtonClick);
+            }
+
+            // Optional: if for any reason the page is being unloaded before redirect, 
+            // we don't need extra cleanup. The timer is non-critical.
+        })();
+    </script>
+</body>
+</html>
