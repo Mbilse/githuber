@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Githuber Mobile - 随身GitHub IDE</title>
+    <!-- 字体与图标 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 主题变量 */
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f8fa;
+            --bg-sidebar: #f0f2f5;
+            --text-primary: #24292f;
+            --text-secondary: #57606a;
+            --border-color: #e1e4e8;
+            --accent: #0969da;
+            --danger: #cf222e;
+            --tree-hover: #eaeef2;
+        }
+
+        body.dark {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-sidebar: #0d1117;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --border-color: #30363d;
+            --accent: #2f81f7;
+            --danger: #f85149;
+            --tree-hover: #1f2428;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            touch-action: pan-x pan-y;
+        }
+
+        /* 主应用容器 */
+        .app-mobile {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            position: relative;
+        }
+
+        /* 顶部导航栏 */
+        .top-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            gap: 8px;
+            flex-wrap: wrap;
+            z-index: 10;
+        }
+
+        .repo-info {
+            flex: 1;
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            white-space: nowrap;
+            scrollbar-width: none;
+        }
+        .repo-info select, .branch-info select {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 6px 12px;
+            font-size: 13px;
+            color: var(--text-primary);
+            max-width: 140px;
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: none;
+            font-size: 20px;
+            color: var(--text-secondary);
+            padding: 6px;
+            cursor: pointer;
+            border-radius: 30px;
+        }
+        .icon-btn:active { background: var(--tree-hover); }
+
+        /* 编辑器区域 */
+        .editor-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: var(--bg-primary);
+        }
+        #monacoEditor {
+            width: 100%;
+            height: 100%;
+        }
+        .file-path-bar {
+            background: var(--bg-secondary);
+            padding: 6px 12px;
+            font-size: 12px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* 底部导航栏 */
+        .bottom-nav {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            padding: 8px 12px;
+            z-index: 20;
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+        .nav-item.active {
+            color: var(--accent);
+            background: var(--tree-hover);
+        }
+        .nav-item i { font-size: 22px; }
+
+        /* 侧滑菜单 (文件树 + 分支) */
+        .drawer {
+            position: fixed;
+            top: 0;
+            left: -85%;
+            width: 85%;
+            height: 100%;
+            background: var(--bg-secondary);
+            z-index: 100;
+            transition: left 0.25s ease;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 12px;
+        }
+        .drawer.open { left: 0; }
+        .drawer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+        }
+        .file-tree-scroll {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .tree-item {
+            padding: 10px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .branch-selector {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 8px;
+            margin-top: 8px;
+        }
+
+        /* 底部弹窗 (提交/操作/Issues等) */
+        .bottom-sheet {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-primary);
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            z-index: 200;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+        }
+        .bottom-sheet.open { transform: translateY(0); }
+        .sheet-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+        }
+        .sheet-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        .overlay {
+            position: fixed;
+            top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 90;
+            display: none;
+        }
+        .overlay.active { display: block; }
+
+        /* 通用组件 */
+        .btn {
+            background: var(--accent);
+            border: none;
+            padding: 10px;
+            border-radius: 24px;
+            color: white;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            margin: 6px 0;
+        }
+        .card-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .list-item {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .contrib-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            margin-top: 10px;
+        }
+        .contrib-cell { aspect-ratio: 1; background: #ebedf0; border-radius: 2px; }
+        body.dark .contrib-cell { background: #21262d; }
+        .level-1 { background: #9be9a8; }
+        .level-2 { background: #40c463; }
+        .level-3 { background: #30a14e; }
+        .level-4 { background: #216e39; }
+
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar { width: 4px; }
+    </style>
+</head>
+<body>
+<div class="app-mobile">
+    <div class="top-nav">
+        <button class="icon-btn" id="menuToggle"><i class="fas fa-bars"></i></button>
+        <div class="repo-info">
+            <select id="repoSelectMobile"><option>加载中...</option></select>
+            <select id="branchSelectMobile"><option>main</option></select>
+        </div>
+        <button class="icon-btn" id="themeToggleMobile"><i class="fas fa-moon"></i></button>
+        <img id="avatarMobile" src="https://avatars.githubusercontent.com/u/583231?v=4" width="32" height="32" style="border-radius:50%; border:1px solid var(--border-color);">
+    </div>
+
+    <div class="file-path-bar">
+        <span id="currentFileMobile">未选择文件</span>
+        <button class="icon-btn" id="saveCommitMobileBtn" style="font-size:14px;"><i class="fas fa-save"></i> 提交</button>
+    </div>
+
+    <div class="editor-container">
+        <div id="monacoEditor" style="height:100%;"></div>
+    </div>
+
+    <div class="bottom-nav">
+        <button class="nav-item" data-panel="commit"><i class="fas fa-code-commit"></i><span>提交</span></button>
+        <button class="nav-item" data-panel="issues"><i class="fas fa-exclamation-circle"></i><span>Issue</span></button>
+        <button class="nav-item" data-panel="pr"><i class="fas fa-code-pull-request"></i><span>PR</span></button>
+        <button class="nav-item" data-panel="more"><i class="fas fa-ellipsis-h"></i><span>更多</span></button>
+    </div>
+
+    <!-- 抽屉：文件树 + 分支切换 + 新建/删除文件 -->
+    <div id="drawer" class="drawer">
+        <div class="drawer-header">
+            <strong><i class="fas fa-folder-tree"></i> 文件树</strong>
+            <div>
+                <button id="newFileMobile" class="icon-btn"><i class="fas fa-file"></i></button>
+                <button id="delFileMobile" class="icon-btn"><i class="fas fa-trash"></i></button>
+                <button id="closeDrawer" class="icon-btn"><i class="fas fa-times"></i></button>
+            </div>
+        </div>
+        <div class="branch-selector">
+            <select id="branchDrawerSelect" style="width:100%;"></select>
+        </div>
+        <div id="fileTreeMobile" class="file-tree-scroll">加载仓库中...</div>
+    </div>
+
+    <!-- 底部弹窗面板：提交/Issues/PRs/更多 -->
+    <div id="bottomSheet" class="bottom-sheet">
+        <div class="sheet-header">
+            <span id="sheetTitle">提交更改</span>
+            <button id="closeSheet" class="icon-btn"><i class="fas fa-chevron-down"></i></button>
+        </div>
+        <div id="sheetContent" class="sheet-content"></div>
+    </div>
+    <div id="overlay" class="overlay"></div>
+</div>
+
+<!-- 模态框 Token -->
+<div id="tokenModalMobile" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:300; align-items:center; justify-content:center;">
+    <div style="background:var(--bg-primary); padding:24px; border-radius:24px; margin:20px;">
+        <h3>🔑 GitHub Token</h3>
+        <input type="password" id="tokenInputMobile" placeholder="输入token (repo, user, gist)" style="width:100%;">
+        <button id="saveTokenMobile" class="btn">保存并启动</button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+<script>
+    // ---------- 移动端 Githuber 核心 ----------
+    let githubToken = localStorage.getItem('gh_token_mobile') || '';
+    let currentUser = null;
+    let activeRepo = null;
+    let currentBranch = 'main';
+    let branchesList = [];
+    let currentFilePath = null;
+    let currentFileSha = null;
+    let editor = null;
+    let monacoReady = false;
+    let pendingContent = '';
+    let currentSheet = 'commit'; // commit, issues, pr, more
+    let repoStarred = false;
+    let tabData = { issues: [], prs: [], discussions: [], gists: [] };
+
+    // DOM 移动端元素
+    const repoSelect = document.getElementById('repoSelectMobile');
+    const branchSelect = document.getElementById('branchSelectMobile');
+    const branchDrawer = document.getElementById('branchDrawerSelect');
+    const fileTreeDiv = document.getElementById('fileTreeMobile');
+    const commitMsgInput = document.createElement('textarea'); // 动态使用
+    const drawer = document.getElementById('drawer');
+    const bottomSheet = document.getElementById('bottomSheet');
+    const overlay = document.getElementById('overlay');
+    const sheetTitle = document.getElementById('sheetTitle');
+    const sheetContent = document.getElementById('sheetContent');
+    const avatarImg = document.getElementById('avatarMobile');
+    const currentFileSpan = document.getElementById('currentFileMobile');
+
+    // 辅助函数
+    function showToast(msg, isErr = false) {
+        let t = document.createElement('div');
+        t.innerText = msg;
+        t.style.position = 'fixed';
+        t.style.bottom = '80px';
+        t.style.left = '16px';
+        t.style.right = '16px';
+        t.style.backgroundColor = isErr ? '#cf222e' : '#2c974b';
+        t.style.color = 'white';
+        t.style.padding = '10px';
+        t.style.borderRadius = '20px';
+        t.style.textAlign = 'center';
+        t.style.zIndex = '999';
+        document.body.appendChild(t);
+        setTimeout(()=>t.remove(), 2500);
+    }
+
+    async function ghFetch(url, options={}) {
+        if(!githubToken) throw new Error('No token');
+        const res = await fetch(url, {
+            ...options,
+            headers: { 'Authorization': `Bearer ${githubToken}`, 'Accept': 'application/vnd.github+json', ...options.headers }
+        });
+        if(!res.ok) throw new Error(`API ${res.status}`);
+        return res.json();
+    }
+
+    // Token 管理
+    function showTokenModal() {
+        const modal = document.getElementById('tokenModalMobile');
+        modal.style.display = 'flex';
+        document.getElementById('saveTokenMobile').onclick = () => {
+            let val = document.getElementById('tokenInputMobile').value.trim();
+            if(val) {
+                githubToken = val;
+                localStorage.setItem('gh_token_mobile', val);
+                modal.style.display = 'none';
+                location.reload();
+            } else showToast('请输入token', true);
+        };
+    }
+    if(!githubToken) showTokenModal();
+
+    // 加载用户 & 仓库
+    async function loadUser() {
+        try {
+            const user = await ghFetch('https://api.github.com/user');
+            currentUser = user;
+            avatarImg.src = user.avatar_url;
+            await loadRepos();
+        } catch(e) { showToast('Token无效', true); showTokenModal(); }
+    }
+    async function loadRepos() {
+        const repos = await ghFetch('https://api.github.com/user/repos?sort=updated&per_page=30');
+        repoSelect.innerHTML = '';
+        repos.forEach(r => {
+            let opt = document.createElement('option');
+            opt.value = `${r.owner.login}/${r.name}`;
+            opt.textContent = r.full_name;
+            repoSelect.appendChild(opt);
+        });
+        if(repos.length) changeRepo(repos[0].owner.login, repos[0].name);
+    }
+    async function changeRepo(owner, name) {
+        activeRepo = { owner, name };
+        await loadBranches();
+        await loadFileTree();
+        await loadIssuesPrsDiscussions();
+        checkStarStatus();
+    }
+    async function loadBranches() {
+        const branches = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/branches`);
+        branchesList = branches.map(b=>b.name);
+        let def = branchesList.includes('main') ? 'main' : branchesList[0];
+        currentBranch = def;
+        [branchSelect, branchDrawer].forEach(sel => {
+            if(sel) {
+                sel.innerHTML = branchesList.map(b=>`<option value="${b}" ${b===currentBranch?'selected':''}>${b}</option>`).join('');
+                sel.onchange = (e) => { currentBranch = e.target.value; loadFileTree(); };
+            }
+        });
+    }
+    async function loadFileTree() {
+        if(!activeRepo) return;
+        fileTreeDiv.innerHTML = '加载中...';
+        try {
+            const items = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents?ref=${currentBranch}`);
+            renderTree(items);
+        } catch(e) { fileTreeDiv.innerHTML = '无内容'; }
+    }
+    function renderTree(items) {
+        fileTreeDiv.innerHTML = '';
+        items.forEach(item => {
+            let div = document.createElement('div');
+            div.className = 'tree-item';
+            div.innerHTML = `<i class="fas ${item.type==='dir'?'fa-folder':'fa-file'}"></i> ${item.name}`;
+            div.onclick = async () => {
+                if(item.type === 'file') await openFile(item.path, item.sha);
+                else await loadDir(item.path);
+                drawer.classList.remove('open');
+                overlay.classList.remove('active');
+            };
+            fileTreeDiv.appendChild(div);
+        });
+    }
+    async function loadDir(path) {
+        let items = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents/${path}?ref=${currentBranch}`);
+        renderTree(items);
+    }
+    async function openFile(path, sha) {
+        currentFilePath = path;
+        currentFileSha = sha;
+        currentFileSpan.innerText = path;
+        let data = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents/${path}?ref=${currentBranch}`);
+        let decoded = atob(data.content);
+        if(editor) editor.setValue(decoded);
+        else { pendingContent = decoded; initMonaco(); }
+    }
+    function initMonaco() {
+        if(monacoReady) return;
+        require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
+        require(['vs/editor/editor.main'], function() {
+            monacoReady = true;
+            editor = monaco.editor.create(document.getElementById('monacoEditor'), {
+                value: pendingContent || '// 选择文件开始编辑',
+                language: 'plaintext',
+                theme: document.body.classList.contains('dark') ? 'vs-dark' : 'vs',
+                automaticLayout: true,
+                fontSize: 14
+            });
+        });
+    }
+
+    // 提交
+    async function commitChanges() {
+        if(!currentFilePath) { showToast('未选择文件', true); return; }
+        let content = editor ? editor.getValue() : '';
+        let msg = document.getElementById('commitMsgInput')?.value || "Mobile commit";
+        let encoded = btoa(unescape(encodeURIComponent(content)));
+        let url = `https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents/${currentFilePath}`;
+        let body = { message: msg, content: encoded, branch: currentBranch };
+        if(currentFileSha) body.sha = currentFileSha;
+        let res = await fetch(url, { method:'PUT', headers:{'Authorization':`Bearer ${githubToken}`}, body:JSON.stringify(body) });
+        if(res.ok) { showToast('提交成功'); loadFileTree(); closeSheet(); }
+        else showToast('提交失败', true);
+    }
+    async function newFile() {
+        let path = prompt("新建文件路径", "newfile.js");
+        if(path) { currentFilePath = path; currentFileSha = null; currentFileSpan.innerText = path; if(editor) editor.setValue(''); else initMonaco(); commitChanges(); }
+    }
+    async function deleteFile() {
+        if(!currentFilePath) return;
+        if(confirm(`删除 ${currentFilePath}?`)) {
+            let url = `https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/contents/${currentFilePath}`;
+            let body = { message: `Delete`, sha: currentFileSha, branch: currentBranch };
+            let res = await fetch(url, { method:'DELETE', headers:{'Authorization':`Bearer ${githubToken}`}, body:JSON.stringify(body) });
+            if(res.ok) { showToast('已删除'); loadFileTree(); editor?.setValue(''); currentFilePath=null; currentFileSpan.innerText='未选择文件'; }
+        }
+    }
+
+    // Issues/PRs 加载
+    async function loadIssuesPrsDiscussions() {
+        if(!activeRepo) return;
+        try {
+            let issues = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/issues?state=all&per_page=10`);
+            let prs = await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/pulls?state=open&per_page=10`);
+            tabData = { issues, prs, discussions: [], gists: [] };
+        } catch(e) {}
+    }
+    function showSheet(panel) {
+        currentSheet = panel;
+        if(panel === 'commit') {
+            sheetTitle.innerText = '📝 提交更改';
+            sheetContent.innerHTML = `<textarea id="commitMsgInput" placeholder="提交信息" rows="2" style="width:100%;"></textarea>
+                                       <button id="doCommitBtn" class="btn">立即提交</button>
+                                       <button id="newFileSheetBtn" class="btn btn-outline">➕ 新建文件</button>
+                                       <button id="delFileSheetBtn" class="btn btn-outline">🗑️ 删除当前文件</button>`;
+            document.getElementById('doCommitBtn')?.addEventListener('click', commitChanges);
+            document.getElementById('newFileSheetBtn')?.addEventListener('click', newFile);
+            document.getElementById('delFileSheetBtn')?.addEventListener('click', deleteFile);
+        } else if(panel === 'issues') {
+            sheetTitle.innerText = '📌 Issues';
+            let html = `<div><button id="createIssueBtn" class="btn" style="margin-bottom:12px;">+ 新建 Issue</button><div id="issueList">${tabData.issues.map(i=>`<div class="list-item"><i class="fas fa-exclamation-circle"></i> ${i.title}</div>`).join('')}</div></div>`;
+            sheetContent.innerHTML = html;
+            document.getElementById('createIssueBtn')?.addEventListener('click', async()=>{ let title=prompt("标题"); if(title) { await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/issues`, {method:'POST',body:JSON.stringify({title})}); showToast('创建成功'); loadIssuesPrsDiscussions(); showSheet('issues'); } });
+        } else if(panel === 'pr') {
+            sheetTitle.innerText = '🔀 Pull Requests';
+            sheetContent.innerHTML = `<button id="createPrBtn" class="btn">+ 新建 PR</button><div id="prList">${tabData.prs.map(p=>`<div class="list-item"><i class="fas fa-code-pull-request"></i> ${p.title}</div>`).join('')}</div>`;
+            document.getElementById('createPrBtn')?.addEventListener('click', async()=>{ let title=prompt("PR标题"); if(title) { await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/pulls`, {method:'POST',body:JSON.stringify({title, head:currentBranch, base:'main'})}); showToast('PR创建'); loadIssuesPrsDiscussions(); showSheet('pr'); } });
+        } else if(panel === 'more') {
+            sheetTitle.innerText = '⚙️ 更多';
+            sheetContent.innerHTML = `<div><button id="starMobileBtn" class="btn-outline btn">⭐ Star 仓库</button>
+                                       <button id="forkMobileBtn" class="btn-outline btn">🍴 Fork 仓库</button>
+                                       <button id="gistsMobileBtn" class="btn-outline btn">📄 查看 Gists</button>
+                                       <button id="contribMobileBtn" class="btn-outline btn">📊 贡献图</button>
+                                       <button id="switchAccMobileBtn" class="btn-outline btn">🔄 切换账户</button>
+                                       <div id="contribGridMobile" class="contrib-grid" style="margin-top:12px;"></div></div>`;
+            document.getElementById('starMobileBtn')?.addEventListener('click', async()=>{ await ghFetch(`https://api.github.com/user/starred/${activeRepo.owner}/${activeRepo.name}`,{method:'PUT'}); showToast('Starred'); });
+            document.getElementById('forkMobileBtn')?.addEventListener('click', async()=>{ await ghFetch(`https://api.github.com/repos/${activeRepo.owner}/${activeRepo.name}/forks`,{method:'POST'}); showToast('Fork 已发起'); });
+            document.getElementById('gistsMobileBtn')?.addEventListener('click', async()=>{ let gists = await ghFetch('https://api.github.com/gists?per_page=5'); alert(gists.map(g=>g.description||g.id).join('\n')); });
+            document.getElementById('contribMobileBtn')?.addEventListener('click', async()=>{ if(currentUser) await loadUserContribution(currentUser.login); });
+            document.getElementById('switchAccMobileBtn')?.addEventListener('click', ()=>{ localStorage.removeItem('gh_token_mobile'); location.reload(); });
+            if(currentUser) loadUserContribution(currentUser.login);
+        }
+        bottomSheet.classList.add('open');
+        overlay.classList.add('active');
+    }
+    async function loadUserContribution(username) {
+        let query = `query($user:String!){user(login:$user){contributionsCollection{contributionCalendar{weeks{contributionDays{date contributionCount}}}}}}`;
+        let res = await fetch('https://api.github.com/graphql', { method:'POST', headers:{'Authorization':`Bearer ${githubToken}`,'Content-Type':'application/json'}, body:JSON.stringify({query, variables:{user:username}})});
+        let json = await res.json();
+        let weeks = json?.data?.user?.contributionsCollection?.contributionCalendar?.weeks || [];
+        let days = weeks.flatMap(w=>w.contributionDays).slice(-49);
+        let grid = document.getElementById('contribGridMobile');
+        if(grid) grid.innerHTML = days.map(d=>`<div class="contrib-cell level-${Math.min(Math.floor(d.contributionCount/5),4)}" title="${d.date}"></div>`).join('');
+    }
+    function closeSheet() { bottomSheet.classList.remove('open'); overlay.classList.remove('active'); }
+    function checkStarStatus() { /* 简略 */ }
+    // 事件绑定
+    document.getElementById('menuToggle').onclick = () => { drawer.classList.toggle('open'); overlay.classList.toggle('active'); };
+    document.getElementById('closeDrawer').onclick = () => { drawer.classList.remove('open'); overlay.classList.remove('active'); };
+    document.getElementById('closeSheet').onclick = closeSheet;
+    overlay.onclick = () => { drawer.classList.remove('open'); closeSheet(); };
+    document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.onclick = () => showSheet(btn.dataset.panel);
+    });
+    document.getElementById('saveCommitMobileBtn').onclick = () => showSheet('commit');
+    document.getElementById('themeToggleMobile').onclick = () => { document.body.classList.toggle('dark'); if(editor && monacoReady) monaco.editor.setTheme(document.body.classList.contains('dark')?'vs-dark':'vs'); };
+    repoSelect.onchange = (e) => { let [owner,name]=e.target.value.split('/'); changeRepo(owner,name); };
+    window.addEventListener('load', () => { initMonaco(); loadUser(); });
+</script>
+</body>
+</html>
